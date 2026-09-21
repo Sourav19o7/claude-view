@@ -35,6 +35,8 @@ Terminals render every line at one font size, so the terminal view distinguishes
 claude-view --web
 ```
 
+Each heading level gets its own typeface and size: H1 in Fraunces (serif), H2 in Space Grotesk, H3 in Inter, H4 in IBM Plex Sans, and H5/H6 as small uppercase IBM Plex Mono. Body text is Inter and code is JetBrains Mono. Change them in `viewer.html`.
+
 This opens a live page in your browser that re-renders on every `/copy`, following your system's light/dark setting. It is served only on `127.0.0.1`, and the rendered Markdown is sanitised with DOMPurify. Press Ctrl-C in the terminal to stop it.
 
 ## How it works
