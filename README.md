@@ -17,7 +17,7 @@ The installer uses Homebrew to install `fzf` and `glow` if they are missing, the
 ## Usage
 
 1. Run `claude-view` in a separate terminal (Warp, iTerm, a tmux pane…).
-2. In Claude Code, run `/copy`.
+2. In Claude Code, run `/copy` — or use the copy button in the VS Code extension.
 3. The response appears instantly, and updates on every subsequent `/copy`.
 
 | Key   | Action                                    |
@@ -39,7 +39,9 @@ This opens a live page in your browser that re-renders on every `/copy`, followi
 
 ## How it works
 
-- `/copy` writes the response to `/tmp/claude-<uid>/response.md`. `claude-view` watches that file, so unrelated clipboard copies don't replace what's on screen. If the file doesn't exist it falls back to the clipboard (`pbpaste`, `xclip`, `wl-paste`).
+- It watches two sources and shows whichever changed most recently:
+  - `/tmp/claude-<uid>/response.md`, which the Claude Code CLI's `/copy` writes.
+  - The clipboard (`pbpaste`, `xclip`, `wl-paste`), which covers the VS Code extension and any other copy button. Single-line clipboard content (a URL, a path) is ignored so stray copies don't replace the view.
 - On a change, it tells `fzf` to redraw via its `--listen` HTTP port.
 - The preview is rendered by `glow` using `docs-style.json`, a theme that drops heading markers and styles each level distinctly.
 

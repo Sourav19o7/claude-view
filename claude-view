@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 TEMP_MD="/tmp/claude_last_response.md"
-# Claude Code's /copy also writes here; watching it ignores unrelated clipboard copies.
+# The CLI's /copy writes here; the VS Code extension's copy only reaches the clipboard, so both are watched.
 SOURCE_MD="/tmp/claude-$(id -u)/response.md"
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
@@ -9,10 +9,12 @@ if [ -n "$TMUX" ] && [ -z "$CLAUDE_VIEW_INNER" ] && [ "$1" != "--web" ]; then
     exec tmux display-popup -w 85% -h 85% -E "CLAUDE_VIEW_INNER=1 '$0'"
 fi
 
-read_source() {
-    if [ -f "$SOURCE_MD" ]; then
-        cat "$SOURCE_MD"
-    elif command -v pbpaste > /dev/null; then
+read_file() {
+    [ -f "$SOURCE_MD" ] && cat "$SOURCE_MD"
+}
+
+read_clipboard() {
+    if command -v pbpaste > /dev/null; then
         pbpaste
     elif command -v xclip > /dev/null; then
         xclip -selection clipboard -o
@@ -21,17 +23,46 @@ read_source() {
     fi
 }
 
+clipboard_sum() {
+    printf '%s' "$(read_clipboard)" | cksum
+}
+
+# Single-line clipboard content (a URL, a path, a command) is ignored so stray copies don't replace the view.
+is_response() {
+    [ "$(printf '%s' "$1" | wc -l)" -ge 1 ]
+}
+
 PORT=$((20000 + RANDOM % 20000))
 
+show_initial() {
+    local clip
+    clip=$(read_clipboard)
+    if is_response "$clip"; then
+        printf '%s\n' "$clip" > "$1"
+    else
+        read_file > "$1"
+    fi
+}
+
 watch_source() {
-    local target="$1" last="" current
+    local target="$1" file_sum clip_sum current clip
+    file_sum=$(read_file | cksum)
+    clip_sum=$(clipboard_sum)
     while sleep 0.5; do
-        current=$(read_source | cksum)
-        if [ "$current" != "$last" ]; then
-            last="$current"
-            read_source > "$target"
-            [ "$MODE" = terminal ] && curl -s -XPOST "localhost:$PORT" -d 'refresh-preview' > /dev/null 2>&1
+        current=$(read_file | cksum)
+        if [ "$current" != "$file_sum" ]; then
+            file_sum="$current"
+            clip_sum=$(clipboard_sum)
+            read_file > "$target"
+        else
+            clip=$(read_clipboard)
+            current=$(printf '%s' "$clip" | cksum)
+            [ "$current" = "$clip_sum" ] && continue
+            clip_sum="$current"
+            is_response "$clip" || continue
+            printf '%s\n' "$clip" > "$target"
         fi
+        [ "$MODE" = terminal ] && curl -s -XPOST "localhost:$PORT" -d 'refresh-preview' > /dev/null 2>&1
     done
 }
 
@@ -39,7 +70,7 @@ if [ "$1" = "--web" ]; then
     MODE=web
     WEB_DIR="$(mktemp -d)"
     cp "$SCRIPT_DIR/viewer.html" "$WEB_DIR/index.html"
-    read_source > "$WEB_DIR/response.md"
+    show_initial "$WEB_DIR/response.md"
     watch_source "$WEB_DIR/response.md" &
     WATCHER_PID=$!
     python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$WEB_DIR" > /dev/null 2>&1 &
@@ -55,7 +86,7 @@ if [ "$1" = "--web" ]; then
 fi
 
 MODE=terminal
-read_source > "$TEMP_MD"
+show_initial "$TEMP_MD"
 watch_source "$TEMP_MD" &
 WATCHER_PID=$!
 trap 'kill $WATCHER_PID 2>/dev/null' EXIT
