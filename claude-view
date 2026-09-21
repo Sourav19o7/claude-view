@@ -5,7 +5,7 @@ TEMP_MD="/tmp/claude_last_response.md"
 SOURCE_MD="/tmp/claude-$(id -u)/response.md"
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
-if [ -n "$TMUX" ] && [ -z "$CLAUDE_VIEW_INNER" ]; then
+if [ -n "$TMUX" ] && [ -z "$CLAUDE_VIEW_INNER" ] && [ "$1" != "--web" ]; then
     exec tmux display-popup -w 85% -h 85% -E "CLAUDE_VIEW_INNER=1 '$0'"
 fi
 
@@ -24,19 +24,39 @@ read_source() {
 PORT=$((20000 + RANDOM % 20000))
 
 watch_source() {
-    local last="" current
+    local target="$1" last="" current
     while sleep 0.5; do
         current=$(read_source | cksum)
         if [ "$current" != "$last" ]; then
             last="$current"
-            read_source > "$TEMP_MD"
-            curl -s -XPOST "localhost:$PORT" -d 'refresh-preview' > /dev/null 2>&1
+            read_source > "$target"
+            [ "$MODE" = terminal ] && curl -s -XPOST "localhost:$PORT" -d 'refresh-preview' > /dev/null 2>&1
         fi
     done
 }
 
+if [ "$1" = "--web" ]; then
+    MODE=web
+    WEB_DIR="$(mktemp -d)"
+    cp "$SCRIPT_DIR/viewer.html" "$WEB_DIR/index.html"
+    read_source > "$WEB_DIR/response.md"
+    watch_source "$WEB_DIR/response.md" &
+    WATCHER_PID=$!
+    python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$WEB_DIR" > /dev/null 2>&1 &
+    SERVER_PID=$!
+    trap 'kill $WATCHER_PID $SERVER_PID 2>/dev/null; rm -rf "$WEB_DIR"' EXIT
+    trap 'exit 0' INT TERM
+    URL="http://127.0.0.1:$PORT/"
+    sleep 0.5
+    if command -v open > /dev/null; then open "$URL"; elif command -v xdg-open > /dev/null; then xdg-open "$URL"; fi
+    echo "claude-view live at $URL — updates on every /copy. Ctrl-C to stop."
+    wait $SERVER_PID
+    exit 0
+fi
+
+MODE=terminal
 read_source > "$TEMP_MD"
-watch_source &
+watch_source "$TEMP_MD" &
 WATCHER_PID=$!
 trap 'kill $WATCHER_PID 2>/dev/null' EXIT
 

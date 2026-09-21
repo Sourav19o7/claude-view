@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-view</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<style>
+  :root { color-scheme: light dark; --bg: #ffffff; --muted: #59636e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --muted: #9198a1; } }
+  body { margin: 0; background: var(--bg); }
+  .markdown-body { box-sizing: border-box; max-width: 900px; margin: 0 auto; padding: 48px 32px 96px; }
+  .markdown-body pre code.hljs { padding: 0; background: transparent; }
+  #status { position: fixed; top: 10px; right: 14px; font: 12px -apple-system, sans-serif; color: var(--muted); }
+  @media (max-width: 600px) { .markdown-body { padding: 24px 16px 64px; } }
+</style>
+</head>
+<body>
+<div id="status">Waiting for /copy…</div>
+<article id="content" class="markdown-body"></article>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/highlight.min.js"></script>
+<script>
+  const content = document.getElementById("content");
+  const status = document.getElementById("status");
+  let last = null;
+
+  async function refresh() {
+    try {
+      const res = await fetch("response.md", { cache: "no-store" });
+      if (!res.ok) return;
+      const text = await res.text();
+      if (text === last) return;
+      last = text;
+      content.innerHTML = DOMPurify.sanitize(marked.parse(text));
+      content.querySelectorAll("pre code").forEach((el) => hljs.highlightElement(el));
+      status.textContent = "Updated " + new Date().toLocaleTimeString();
+    } catch {
+      status.textContent = "claude-view stopped";
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 700);
+</script>
+</body>
+</html>

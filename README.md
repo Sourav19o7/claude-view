@@ -27,6 +27,16 @@ The installer uses Homebrew to install `fzf` and `glow` if they are missing, the
 
 Inside tmux, the viewer opens as a floating popup.
 
+### Browser mode — real font sizes
+
+Terminals render every line at one font size, so the terminal view distinguishes headings by colour and weight only. For true documentation typography (larger H1/H2/H3, proportional fonts, GitHub-style tables and code blocks), run:
+
+```bash
+claude-view --web
+```
+
+This opens a live page in your browser that re-renders on every `/copy`, following your system's light/dark setting. It is served only on `127.0.0.1`, and the rendered Markdown is sanitised with DOMPurify. Press Ctrl-C in the terminal to stop it.
+
 ## How it works
 
 - `/copy` writes the response to `/tmp/claude-<uid>/response.md`. `claude-view` watches that file, so unrelated clipboard copies don't replace what's on screen. If the file doesn't exist it falls back to the clipboard (`pbpaste`, `xclip`, `wl-paste`).
@@ -49,3 +59,4 @@ Edit `docs-style.json` to change colours — it is a standard [glamour](https://
 - `fzf` 0.36+ (for `--listen`)
 - `glow` (falls back to `bat` syntax highlighting if absent)
 - `curl`
+- `python3` (for `--web`)
