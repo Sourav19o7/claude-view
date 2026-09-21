@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+TEMP_MD="/tmp/claude_last_response.md"
+# Claude Code's /copy also writes here; watching it ignores unrelated clipboard copies.
+SOURCE_MD="/tmp/claude-$(id -u)/response.md"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+
+if [ -n "$TMUX" ] && [ -z "$CLAUDE_VIEW_INNER" ]; then
+    exec tmux display-popup -w 85% -h 85% -E "CLAUDE_VIEW_INNER=1 '$0'"
+fi
+
+read_source() {
+    if [ -f "$SOURCE_MD" ]; then
+        cat "$SOURCE_MD"
+    elif command -v pbpaste > /dev/null; then
+        pbpaste
+    elif command -v xclip > /dev/null; then
+        xclip -selection clipboard -o
+    elif command -v wl-paste > /dev/null; then
+        wl-paste
+    fi
+}
+
+PORT=$((20000 + RANDOM % 20000))
+
+watch_source() {
+    local last="" current
+    while sleep 0.5; do
+        current=$(read_source | cksum)
+        if [ "$current" != "$last" ]; then
+            last="$current"
+            read_source > "$TEMP_MD"
+            curl -s -XPOST "localhost:$PORT" -d 'refresh-preview' > /dev/null 2>&1
+        fi
+    done
+}
+
+read_source > "$TEMP_MD"
+watch_source &
+WATCHER_PID=$!
+trap 'kill $WATCHER_PID 2>/dev/null' EXIT
+
+STYLE="${CLAUDE_VIEW_STYLE:-$SCRIPT_DIR/docs-style.json}"
+if command -v glow > /dev/null; then
+    # glow blocks reading stdin when it isn't a terminal, so close it explicitly.
+    RENDER="CLICOLOR_FORCE=1 glow -s '$STYLE' -w \$((FZF_PREVIEW_COLUMNS - 4)) $TEMP_MD < /dev/null"
+else
+    RENDER="bat --style=plain --color=always --language=markdown $TEMP_MD"
+fi
+PREVIEW="[ -s $TEMP_MD ] && $RENDER || echo 'Waiting for /copy in Claude Code...'"
+
+fzf --listen="$PORT" \
+    --header='Live: updates on every /copy | [Enter]: Edit | [Esc]: Close' \
+    --preview "$PREVIEW" \
+    --preview-window='up:95%:border-bottom' \
+    --bind "enter:execute(${EDITOR:-nano} $TEMP_MD)+refresh-preview" \
+    < /dev/null
